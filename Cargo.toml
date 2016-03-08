@@ -2,3 +2,6 @@
 name = "Rustunnel"
 version = "0.1.0"
 authors = ["shahuwang <shahuwang@qq.com>"]
+
+[dependencies]
+rust-crypto = "^0.2"
