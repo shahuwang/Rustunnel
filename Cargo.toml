@@ -5,3 +5,5 @@ authors = ["shahuwang <shahuwang@qq.com>"]
 
 [dependencies]
 rust-crypto = "^0.2"
+bincode = "*"
+rustc-serialize = "*"
