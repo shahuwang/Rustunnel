@@ -4,12 +4,15 @@ extern crate rustc_serialize;
 use crypto::rc4::Rc4;
 use crypto::symmetriccipher::SynchronousStreamCipher;
 use std::io::prelude::*;
-use std::io::{BufReader, BufWriter, Result, Bytes, Chars, Chain, Tee, Take};
+use std::io::{BufReader, BufWriter, Result, Bytes,
+                Chars, Chain, Tee, Take,
+                Error, ErrorKind};
+use std::result::Result::{self as stdResult, Ok, Err};
 use std::net::TcpStream;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use bincode::SizeLimit;
-use bincode::rustc_serialize::{encode, decode_from};
+use bincode::rustc_serialize::{encode, decode_from, DecodingResult};
 struct TunConn<'a>{
     conn: &'a TcpStream,
     reader: BufReader<&'a TcpStream>,
@@ -43,7 +46,6 @@ impl <'a>TunConn<'a>{
 }
 
 impl<'a> Read for TunConn<'a>{
-    #![allow(unstable)]
     fn read(&mut self, b: &mut [u8]) -> Result<usize>{
         let ret = self.reader.read(b);
         if ret.is_ok() && self.dec.is_some(){
@@ -68,9 +70,21 @@ impl<'a> Read for TunConn<'a>{
         //self.reader.read_to_string(buf)
     }
 
-    fn read_exact(&mut self, buf: &mut [u8]) -> Result<()>{
-        unimplemented!();
-        // self.reader.read_exact(buf)
+    fn read_exact(&mut self, mut buf: &mut [u8]) -> Result<()>{
+        while !buf.is_empty(){
+            match self.read(buf){
+                Ok(0) => break,
+                Ok(n) => { let tmp = buf; buf = &mut tmp[n..]; }                
+                Err(ref e) if e.kind() == ErrorKind::Interrupted =>{}
+                Err(e) => return Err(e),
+            }
+        }
+        if !buf.is_empty(){
+            Err(Error::new(ErrorKind::UnexpectedEof,
+                           "failed to fill whole buffer"))
+        }else{
+            Ok(())
+        }
     }
 
     fn by_ref(&mut self) -> &mut Self where Self: Sized{
@@ -95,7 +109,6 @@ impl<'a> Read for TunConn<'a>{
         unimplemented!();
         // self.reader.take(limit)
     }
-
     fn tee<W:Write>(self, out: W) -> Tee<Self, W> where Self:Sized{
         unimplemented!();
         // self.reader.tee(out)
@@ -144,10 +157,24 @@ impl<'a>Tunnel<'a>{
         return ret2;
     }
 
-    fn read(&mut self){
+    fn read(&mut self, mut buf: Vec<u8>) -> Option<u16>{
         let timeout = Duration::new(60 * 10, 0);
         self.mutex.lock();
         self.tcon.set_read_timeout(Some(timeout)); 
-        let ret: Header = decode_from(&mut self.tcon, SizeLimit::Infinite).unwrap();
+        let ret: DecodingResult<Header> = decode_from(&mut self.tcon, SizeLimit::Infinite);
+        if ret.is_err(){
+            return None;
+        }
+        let header = ret.unwrap();
+        let mut data = vec![0; header.len as usize];
+        self.tcon.set_read_timeout(Some(timeout));
+        match self.tcon.read_exact(&mut data){
+            Ok(()) => {
+                let linkid = header.linkid;
+                buf = data;
+                Some(linkid)
+            },
+            Err(e) => None
+        }
     }
 }
