@@ -5,6 +5,8 @@ extern crate rustc_serialize;
 mod client;
 mod id_allocator;
 mod conn;
+mod hub;
+mod link_buffer;
 // use std::io::prelude::*;
 // use std::io::BufWriter;
 // use std::net::TcpStream;

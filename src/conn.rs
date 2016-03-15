@@ -13,15 +13,15 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use bincode::SizeLimit;
 use bincode::rustc_serialize::{encode, decode_from, DecodingResult};
-struct TunConn<'a>{
-    conn: &'a TcpStream,
-    reader: BufReader<&'a TcpStream>,
-    writer: BufWriter<&'a TcpStream>,
+pub struct TunConn{
+    conn: TcpStream,
+    reader: BufReader<TcpStream>,
+    writer: BufWriter<TcpStream>,
     enc: Option<Rc4>,
     dec: Option<Rc4>
 }
 
-impl <'a>TunConn<'a>{
+impl TunConn{
     fn set_cipher_key(&mut self, key: &[u8]){
         self.enc = Some(Rc4::new(key));
         self.dec = Some(Rc4::new(key));
@@ -45,7 +45,7 @@ impl <'a>TunConn<'a>{
     }
 }
 
-impl<'a> Read for TunConn<'a>{
+impl Read for TunConn{
     fn read(&mut self, b: &mut [u8]) -> Result<usize>{
         let ret = self.reader.read(b);
         if ret.is_ok() && self.dec.is_some(){
@@ -122,17 +122,17 @@ struct Header{
     len: u16,
 }
 
-struct Tunnel<'a>{
-    tcon: TunConn<'a>,
+pub struct Tunnel{
+    pub tcon: TunConn,
     mutex: Mutex<u8>,
 }
 
-impl<'a>Tunnel<'a>{
-    fn new(conn: &'a TcpStream) -> Tunnel{
+impl Tunnel{
+    fn new(conn: TcpStream) -> Tunnel{
         let tcon = TunConn{
-            conn: conn,
-            reader: BufReader::new(conn),
-            writer: BufWriter::new(conn),
+            conn: conn.try_clone().unwrap(),
+            reader: BufReader::new(conn.try_clone().unwrap()),
+            writer: BufWriter::new(conn.try_clone().unwrap()),
             enc: None,
             dec: None,
         };
@@ -177,4 +177,5 @@ impl<'a>Tunnel<'a>{
             Err(e) => None
         }
     }
+
 }
